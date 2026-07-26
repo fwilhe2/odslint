@@ -27,6 +27,9 @@ uv run odslint --format json path.ods      # machine-readable
 uv run odslint --rule formula/magic-number path.ods   # one rule only
 uv run odslint --list-rules
 
+uv run odslint-clean tests/fixtures/*.fods # normalize flat XML in place
+uv run odslint-clean --check path.fods     # exit 1 if it would change
+
 uv run pytest                              # full suite (~3s)
 uv run pytest tests/rules/test_magic_number.py::test_flags_a_hardcoded_rate
 uv run pytest -k named_range
@@ -51,6 +54,8 @@ src/odslint/
   engine.py      load -> rules -> suppression -> sorted diagnostics
   report.py      text and json
   cli.py
+  cleanup.py     odslint-clean: the one thing here that writes to a file
+  vendor/        third-party code, verbatim, under its own license
 ```
 
 Rules are pure: they read the model and yield `Diagnostic`s, never mutate. Severity on a yielded
@@ -124,6 +129,37 @@ errors. See README for the format.
 Spreadsheets have no comment syntax, so inline suppression uses **cell annotations** containing
 `odslint-disable` (all rules on that cell) or `odslint-disable rule/id, other/id`.
 
+## Flat-ODF cleanup (`odslint-clean`)
+
+`cleanup.py` normalizes a `.fods` in place so it diffs like source: it drops unused styles, the
+default number formats, `office:settings` / `office:scripts`, volatile `office:meta` children and
+cached OLE bitmaps, renumbers the automatic table styles to a dense sequence, prunes the ~35
+namespace declarations LibreOffice re-emits everywhere, and splits multi-attribute start tags onto
+one line each.
+
+This is **not** autofix — it is churn removal, it knows nothing about diagnostics, and the lint path
+never calls into it. Its contract is that a cleaned file lints identically, which
+`tests/test_cleanup.py` asserts over every fixture (model *and* diagnostics), and
+`test_libreoffice_roundtrip.py` re-checks by having Calc reopen the cleaned files.
+
+The engine is LibreOffice's `bin/flat-odf-cleanup.py`, vendored **byte-identical** at
+`vendor/flat_odf_cleanup.py` so it can be resynced with a plain `curl`; it is MPL-2.0 and keeps its
+own notice, while the rest of the project is MIT. Provenance, the resync command and the licensing
+consequences are documented in the README's "Third-party code" section, with the license text in
+`LICENSES/MPL-2.0.txt` — keep all three in step if you re-vendor. Consequences worth knowing before
+touching it:
+
+- Do not reformat, retype or tidy the vendored file. It is excluded from ruff and mypy in
+  `pyproject.toml` for exactly that reason; `cleanup.py` is the typed boundary in front of it.
+- It is a script, not a library: `collect_all_attribute` reads a module-global `root`, and logging
+  reads a module-global `VERBOSE`. `clean_bytes` primes both before calling `remove_unused`. That is
+  why cleaning is not reentrant.
+- `clean_bytes` assembles the final document itself (`_assemble`) rather than using upstream's
+  `tostring(root)`, which drops comments outside the root element — our fixtures open with one.
+
+Dropping `office:settings` means `Document.settings` comes back empty on a cleaned file, which
+matters for the `meta/iterative-calculation-enabled` idea in the backlog.
+
 ## Testing convention
 
 **Fixtures are `.fods`, never checked-in binaries** — flat XML is text, so it diffs and reviews like
@@ -166,4 +202,5 @@ Worth building next, roughly in value order. Several are cheap now that the load
   `meta/iterative-calculation-enabled` (`Document.settings`)
 
 Deferred by design: **autofix**. Rules stay pure and diagnostics stay the output; a fixer would sit
-downstream and must preserve unknown ZIP parts byte-for-byte.
+downstream and must preserve unknown ZIP parts byte-for-byte. `odslint-clean` is not a step towards
+it — it rewrites a document without ever consulting a diagnostic.

@@ -17,6 +17,7 @@ import subprocess
 import pytest
 
 from helpers import FIXTURES, fixture
+from odslint.cleanup import clean_file
 from odslint.config import Config
 from odslint.engine import lint_file, select_rules
 from odslint.loader import load
@@ -45,9 +46,8 @@ def _soffice_env() -> dict[str, str]:
     return env
 
 
-@pytest.fixture(scope="module")
-def converted(tmp_path_factory):
-    """Every ``.fods`` fixture as written by LibreOffice itself."""
+def _convert(tmp_path_factory, sources):
+    """Run every source through ``soffice --convert-to ods`` into a fresh dir."""
     out = tmp_path_factory.mktemp("libreoffice")
     profile = tmp_path_factory.mktemp("profile")
 
@@ -60,7 +60,7 @@ def converted(tmp_path_factory):
             "ods",
             "--outdir",
             str(out),
-            *[str(fixture(name)) for name in FIXTURE_NAMES],
+            *[str(source) for source in sources],
         ],
         capture_output=True,
         timeout=300,
@@ -74,6 +74,22 @@ def converted(tmp_path_factory):
     if missing:
         pytest.fail(f"LibreOffice did not convert {missing}: {result.stderr.strip()}")
     return out
+
+
+@pytest.fixture(scope="module")
+def converted(tmp_path_factory):
+    """Every ``.fods`` fixture as written by LibreOffice itself."""
+    return _convert(tmp_path_factory, [fixture(name) for name in FIXTURE_NAMES])
+
+
+@pytest.fixture(scope="module")
+def converted_after_cleanup(tmp_path_factory):
+    """Every fixture run through ``odslint-clean`` and then through LibreOffice."""
+    staged = tmp_path_factory.mktemp("cleaned")
+    sources = [shutil.copy(fixture(name), staged / name) for name in FIXTURE_NAMES]
+    for source in sources:
+        clean_file(source)
+    return _convert(tmp_path_factory, sources)
 
 
 @pytest.mark.parametrize("name", FIXTURE_NAMES)
@@ -102,3 +118,22 @@ def test_diagnostics_are_identical_for_both_packagings(converted, name):
         return [(d.rule_id, d.location, d.message) for d in lint_file(path, config, rules)]
 
     assert signature(converted / f"{name.removesuffix('.fods')}.ods") == signature(fixture(name))
+
+
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_a_cleaned_fixture_still_opens_in_libreoffice(converted_after_cleanup, name):
+    """The cleanup strips namespace declarations and renames styles.
+
+    Both are the kind of edit that a static reader shrugs at and LibreOffice
+    chokes on — dropping ``xmlns:of`` turns every formula into ``Err:510``, and
+    the linter would never notice because it resolves prefixes structurally.
+    Getting Calc itself to reopen the cleaned file is the only real proof.
+    """
+    config = Config()
+    rules = select_rules(config)
+
+    def signature(path):
+        return [(d.rule_id, d.location, d.message) for d in lint_file(path, config, rules)]
+
+    reopened = converted_after_cleanup / f"{name.removesuffix('.fods')}.ods"
+    assert signature(reopened) == signature(fixture(name))

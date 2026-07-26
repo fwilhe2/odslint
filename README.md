@@ -74,11 +74,90 @@ is ignored, so the directive can sit next to a real note explaining *why*.
 `0` clean · `1` findings at or above `fail-on` · `2` tool error (unreadable
 file, bad config).
 
+## Keeping `.fods` files in git
+
+A flat `.fods` is text, so it can live in version control like source — except
+that LibreOffice rewrites a great deal on every save that has nothing to do with
+what you changed. It renumbers its internal styles (`ce1` becomes `ce24`), emits
+a default set of number formats nothing uses, re-declares three dozen namespaces
+on every style element, bumps `meta:editing-cycles`, and re-renders cached
+bitmaps for embedded charts. Edit one cell, commit a four-thousand-line diff.
+
+`odslint-clean` strips all of that, in place:
+
+```console
+$ odslint-clean model.fods
+cleaned model.fods
+
+$ odslint-clean --check *.fods      # exit 1 if anything would change; writes nothing
+```
+
+It also reformats start tags to one attribute per line, so changing an attribute
+shows up as a one-line diff. Running it twice changes nothing the second time,
+which makes it usable as a pre-commit hook:
+
+```yaml
+- repo: local
+  hooks:
+    - id: odslint-clean
+      name: normalize flat ODF
+      entry: odslint-clean
+      language: system
+      files: \.fods$
+```
+
+Two caveats. This is **the one part of odslint that writes to your files**, and
+it is lossy on purpose: unused styles, `office:settings`, `office:scripts`,
+volatile metadata and cached replacement images are all dropped. That is right
+for a document whose source of truth is git, and wrong for one you keep only as
+a binary. It works on flat `.fods` only — a `.ods` package is a ZIP and has
+nothing useful to diff.
+
+The cleanup itself is not ours — it is LibreOffice's own `flat-odf-cleanup.py`,
+vendored under the MPL-2.0 (see [Third-party code](#third-party-code));
+`odslint.cleanup` is a typed wrapper around it.
+
 ## Scope
 
-`odslint` reasons statically over the stored document. It does not recalculate
-formulas, and it never writes to your files.
+Linting reasons statically over the stored document. It does not recalculate
+formulas, and it never writes to your files — `odslint-clean` is a separate
+command precisely because it does.
+
+## Third-party code
+
+One file in this repository was not written for it and is not under its license.
+
+**`src/odslint/vendor/flat_odf_cleanup.py`**
+
+| | |
+| --- | --- |
+| License | Mozilla Public License 2.0 — full text in [`LICENSES/MPL-2.0.txt`](LICENSES/MPL-2.0.txt) |
+| Copyright | The LibreOffice contributors, per the notice in the file's header |
+| Origin | [`bin/flat-odf-cleanup.py`](https://github.com/LibreOffice/core/blob/11f10c48688436129337ffc7a082a56023c58071/bin/flat-odf-cleanup.py) in the LibreOffice core repository |
+| Taken from | [`scripts/flat-odf-cleanup.py`](https://github.com/fwilhe2/office-in-git/blob/main/scripts/flat-odf-cleanup.py) in `fwilhe2/office-in-git`, at commit `46c8770` (2026-07-21), which carries LibreOffice's script plus several additions |
+| Modifications | None. Byte-identical to the source above, header and license notice intact. |
+| Used by | [`src/odslint/cleanup.py`](src/odslint/cleanup.py), which drives it |
+
+It is kept verbatim so it can be resynced with a plain `curl`, which is also why
+it is excluded from `ruff` and `mypy` in `pyproject.toml`:
+
+```console
+$ curl -o src/odslint/vendor/flat_odf_cleanup.py \
+    https://raw.githubusercontent.com/fwilhe2/office-in-git/main/scripts/flat-odf-cleanup.py
+$ uv run pytest tests/test_cleanup.py
+```
+
+If you ever do need to change it, the MPL is a per-file copyleft: the modified
+file stays MPL-2.0 and the change has to be published under the same license.
+Prefer sending the fix upstream and re-vendoring.
+
+Nothing else here is third-party. The only runtime dependency is `lxml`
+(BSD-3-Clause), which is installed normally rather than vendored.
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE). The one exception is the vendored file described
+under [Third-party code](#third-party-code), which remains under the MPL-2.0.
+The MPL and the MIT license are compatible; distributing the two together, as
+this project does, is exactly the case the MPL's file-scoped copyleft is
+designed for.

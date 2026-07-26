@@ -8,6 +8,7 @@ dependencies = ["lxml>=5.0"]
 
 [project.scripts]
 odslint = "odslint.cli:main"
+odslint-clean = "odslint.cleanup:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -25,6 +26,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Vendored verbatim from upstream so it can be resynced with a plain curl.
+extend-exclude = ["src/odslint/vendor/flat_odf_cleanup.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -40,3 +43,9 @@ files = ["src/odslint"]
 [[tool.mypy.overrides]]
 module = "lxml.*"
 ignore_missing_imports = true
+
+# Same reason as the ruff exclusion: untyped upstream code, kept verbatim.
+# odslint.cleanup is the typed boundary in front of it.
+[[tool.mypy.overrides]]
+module = "odslint.vendor.flat_odf_cleanup"
+ignore_errors = true
