@@ -20,11 +20,31 @@ budget.ods:Totals!D4: error [formula/inconsistent-in-range] formula '=SUM([.A4:.
 
 ## Install
 
-```console
-uv tool install git+https://github.com/fwilhe2/odslint      # odslint on your PATH
-uvx --from git+https://github.com/fwilhe2/odslint odslint   # one-off, nothing installed
+Install from PyPI: https://pypi.org/project/odslint/
 
-uv sync          # development
+```console
+# pip
+pip install odslint
+odslint budget.ods
+
+# uv (install a command on your PATH)
+uv tool install odslint
+odslint budget.ods
+
+# uv (one-off, nothing installed)
+uvx odslint budget.ods
+
+# venv
+python -m venv .venv
+source .venv/bin/activate
+pip install odslint
+odslint budget.ods
+```
+
+For development from a checkout:
+
+```console
+uv sync
 uv run odslint --help
 ```
 
