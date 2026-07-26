@@ -83,20 +83,41 @@ jobs:
 
       - run: uv sync
 
-      - name: TEMPORARY probe - convert each fixture on its own
+      - name: TEMPORARY probe - bisect suppression.fods
         run: |
           soffice --version
+          mkdir -p /tmp/variants
+          python3 - <<'PY'
+          import pathlib, re
+          src = pathlib.Path("tests/fixtures/suppression.fods").read_text()
+          out = pathlib.Path("/tmp/variants")
+
+          b1 = re.search(r"\n\s*<office:annotation>\n.*?</office:annotation>", src, re.S).group(0)
+          a2 = "<office:annotation><text:p>odslint-disable</text:p></office:annotation>\n            "
+
+          variants = {
+              "baseline": src,
+              "no-b1-annotation": src.replace(b1, ""),
+              "no-a2-annotation": src.replace(a2, ""),
+              "no-annotations": src.replace(b1, "").replace(a2, ""),
+              "no-string-value": src.replace(' office:string-value="2024-01-31"', ""),
+              "with-dc-svg-ns": src.replace(
+                  'xmlns:calcext=',
+                  'xmlns:dc="http://purl.org/dc/elements/1.1/"\n'
+                  '    xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"\n'
+                  '    xmlns:calcext=',
+              ),
+          }
+          for name, text in variants.items():
+              (out / f"{name}.fods").write_text(text)
+              print(f"wrote {name}.fods ({len(text)} bytes, changed={text != src})")
+          PY
           set +e
-          for f in tests/fixtures/*.fods; do
-            rm -rf /tmp/probe; mkdir -p /tmp/probe
-            timeout 120 soffice --headless --convert-to ods --outdir /tmp/probe "$f" 2>&1 | sed 's/^/    /'
-            echo "=== $f exit=$? produced=[$(ls /tmp/probe)]"
+          for f in /tmp/variants/*.fods; do
+            rm -rf /tmp/vout; mkdir -p /tmp/vout
+            timeout 120 soffice --headless --convert-to ods --outdir /tmp/vout "$f" >/tmp/log 2>&1
+            echo "=== $(basename $f) produced=[$(ls /tmp/vout)] $(grep -c 'Unspecified Application Error' /tmp/log) errors"
           done
-          echo "--- again, with a private user profile ---"
-          rm -rf /tmp/probe2; mkdir -p /tmp/probe2
-          timeout 120 soffice -env:UserInstallation=file:///tmp/loprofile --headless \
-            --convert-to ods --outdir /tmp/probe2 tests/fixtures/suppression.fods 2>&1 | sed 's/^/    /'
-          echo "=== suppression with private profile exit=$? produced=[$(ls /tmp/probe2)]"
 
       - name: Fail if LibreOffice was not picked up
         run: uv run python -c "import shutil,sys; sys.exit(0 if shutil.which('soffice') else 'soffice not on PATH')"
