@@ -83,6 +83,21 @@ jobs:
 
       - run: uv sync
 
+      - name: TEMPORARY probe - convert each fixture on its own
+        run: |
+          soffice --version
+          set +e
+          for f in tests/fixtures/*.fods; do
+            rm -rf /tmp/probe; mkdir -p /tmp/probe
+            timeout 120 soffice --headless --convert-to ods --outdir /tmp/probe "$f" 2>&1 | sed 's/^/    /'
+            echo "=== $f exit=$? produced=[$(ls /tmp/probe)]"
+          done
+          echo "--- again, with a private user profile ---"
+          rm -rf /tmp/probe2; mkdir -p /tmp/probe2
+          timeout 120 soffice -env:UserInstallation=file:///tmp/loprofile --headless \
+            --convert-to ods --outdir /tmp/probe2 tests/fixtures/suppression.fods 2>&1 | sed 's/^/    /'
+          echo "=== suppression with private profile exit=$? produced=[$(ls /tmp/probe2)]"
+
       - name: Fail if LibreOffice was not picked up
         run: uv run python -c "import shutil,sys; sys.exit(0 if shutil.which('soffice') else 'soffice not on PATH')"
 
