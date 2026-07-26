@@ -55,7 +55,7 @@ src/odslint/
   report.py      text and json
   cli.py
   cleanup.py     odslint-clean: the one thing here that writes to a file
-  vendor/        third-party code, verbatim, under its own license
+  vendor/        forked-from-elsewhere code, under its own license
 ```
 
 Rules are pure: they read the model and yield `Diagnostic`s, never mutate. Severity on a yielded
@@ -142,15 +142,21 @@ never calls into it. Its contract is that a cleaned file lints identically, whic
 `tests/test_cleanup.py` asserts over every fixture (model *and* diagnostics), and
 `test_libreoffice_roundtrip.py` re-checks by having Calc reopen the cleaned files.
 
-The engine is LibreOffice's `bin/flat-odf-cleanup.py`, vendored **byte-identical** at
-`vendor/flat_odf_cleanup.py` so it can be resynced with a plain `curl`; it is MPL-2.0 and keeps its
-own notice, while the rest of the project is MIT. Provenance, the resync command and the licensing
-consequences are documented in the README's "Third-party code" section, with the license text in
-`LICENSES/MPL-2.0.txt` — keep all three in step if you re-vendor. Consequences worth knowing before
-touching it:
+The engine at `vendor/flat_odf_cleanup.py` is a **fork of LibreOffice's `bin/flat-odf-cleanup.py`,
+and this repo is its canonical home** — it is not resynced from anywhere, so change it here. It is
+MPL-2.0 and keeps LibreOffice's own notice, while the rest of the project is MIT. On top of
+upstream's passes it is quiet by default (`log()` gated on `VERBOSE`), cleans files in place, splits
+start tags to one attribute per line, prunes namespaces without stripping the `xmlns:of` that
+`table:formula` needs textually, and additionally drops unused number-format styles, volatile
+`office:meta` children, cached OLE bitmaps, `calcext:value-type` and zero `loext:tab-stop-distance`,
+plus renumbers the automatic table styles. The full list against upstream, the provenance and the
+licensing consequences live in the README's "Third-party code" section, with the license text in
+`LICENSES/MPL-2.0.txt` — keep all three in step when you change the fork. Things worth knowing
+before touching it:
 
-- Do not reformat, retype or tidy the vendored file. It is excluded from ruff and mypy in
-  `pyproject.toml` for exactly that reason; `cleanup.py` is the typed boundary in front of it.
+- Keep it in upstream's style: no reformatting, retyping or tidying, so a diff against LibreOffice's
+  version stays readable. It is excluded from ruff and mypy in `pyproject.toml` for exactly that
+  reason; `cleanup.py` is the typed boundary in front of it.
 - It is a script, not a library: `collect_all_attribute` reads a module-global `root`, and logging
   reads a module-global `VERBOSE`. `clean_bytes` primes both before calling `remove_unused`. That is
   why cleaning is not reentrant.

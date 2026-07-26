@@ -9,6 +9,11 @@
 #
 
 # Source: https://github.com/LibreOffice/core/blob/11f10c48688436129337ffc7a082a56023c58071/bin/flat-odf-cleanup.py#L1
+#
+# This is a MODIFIED fork of that file, and this repository (fwilhe2/odslint) is
+# the canonical home of the fork - it is not resynced from upstream. Per the MPL
+# above, the modifications are published under the MPL-2.0 as well. See the
+# README's "Third-party code" section for what was changed and why.
 
 import sys
 # sadly need lxml because the python one doesn't preserve namespace prefixes

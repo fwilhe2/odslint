@@ -47,7 +47,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
-# Vendored verbatim from upstream so it can be resynced with a plain curl.
+# A fork of an upstream script, kept in upstream's style so that a diff against
+# LibreOffice's version stays readable.
 extend-exclude = ["src/odslint/vendor/flat_odf_cleanup.py"]
 
 [tool.ruff.lint]
@@ -65,7 +66,7 @@ files = ["src/odslint"]
 module = "lxml.*"
 ignore_missing_imports = true
 
-# Same reason as the ruff exclusion: untyped upstream code, kept verbatim.
+# Same reason as the ruff exclusion: untyped upstream code, kept in its own style.
 # odslint.cleanup is the typed boundary in front of it.
 [[tool.mypy.overrides]]
 module = "odslint.vendor.flat_odf_cleanup"
