@@ -5,13 +5,34 @@ description = "A linter for LibreOffice Calc spreadsheets (.ods and flat .fods)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["lxml>=5.0"]
+authors = [{ name = "Florian Wilhelm", email = "fwilhelm.wgt+github@gmail.com" }]
+keywords = ["ods", "fods", "opendocument", "libreoffice", "spreadsheet", "linter"]
+license = "MIT"
+# LICENSES/ carries the MPL-2.0 text for src/odslint/vendor/flat_odf_cleanup.py,
+# which ships in the wheel and may not travel without its license.
+license-files = ["LICENSE", "LICENSES/*"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Office/Business :: Financial :: Spreadsheet",
+  "Topic :: Software Development :: Quality Assurance",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/fwilhe2/odslint"
+Repository = "https://github.com/fwilhe2/odslint"
+Issues = "https://github.com/fwilhe2/odslint/issues"
 
 [project.scripts]
 odslint = "odslint.cli:main"
 odslint-clean = "odslint.cleanup:main"
 
+# PEP 639 (license / license-files as written above) needs hatchling 1.27+.
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
