@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+    xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
+    office:version="1.3"
+    office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Import">
+        <table:table-column table:number-columns-repeated="2"/>
+
+        <!-- A1 header: text that is text. -->
+        <table:table-row>
+          <table:table-cell office:value-type="string"><text:p>Amount</text:p></table:table-cell>
+          <table:table-cell office:value-type="string"><text:p>Booked</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- A2: a number that will silently drop out of SUM. -->
+        <table:table-row>
+          <table:table-cell office:value-type="string" office:string-value="1234.56"><text:p>1234.56</text:p></table:table-cell>
+          <table:table-cell office:value-type="string" office:string-value="2024-01-31"><text:p>2024-01-31</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- A3: correctly typed. B3: a code, where the leading zero matters. -->
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="1000"><text:p>1000</text:p></table:table-cell>
+          <table:table-cell office:value-type="string" office:string-value="00742"><text:p>00742</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- A4: German grouping. B4: genuinely text. -->
+        <table:table-row>
+          <table:table-cell office:value-type="string" office:string-value="1.234,56"><text:p>1.234,56</text:p></table:table-cell>
+          <table:table-cell office:value-type="string" office:string-value="n/a"><text:p>n/a</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

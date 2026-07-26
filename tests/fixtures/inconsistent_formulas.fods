@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+    xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
+    office:version="1.3"
+    office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Totals">
+        <table:table-column table:number-columns-repeated="4"/>
+
+        <table:table-row>
+          <table:table-cell office:value-type="string"><text:p>Q1</text:p></table:table-cell>
+          <table:table-cell office:value-type="string"><text:p>Q2</text:p></table:table-cell>
+          <table:table-cell office:value-type="string"><text:p>Q3</text:p></table:table-cell>
+          <table:table-cell office:value-type="string"><text:p>Total</text:p></table:table-cell>
+        </table:table-row>
+
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="1"><text:p>1</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="2"><text:p>2</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="3"><text:p>3</text:p></table:table-cell>
+          <table:table-cell table:formula="of:=SUM([.A2:.C2])" office:value-type="float" office:value="6"><text:p>6</text:p></table:table-cell>
+        </table:table-row>
+
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="4"><text:p>4</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="5"><text:p>5</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="6"><text:p>6</text:p></table:table-cell>
+          <table:table-cell table:formula="of:=SUM([.A3:.C3])" office:value-type="float" office:value="15"><text:p>15</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- D4: the fill was hand-edited and no longer covers column C. -->
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="7"><text:p>7</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="8"><text:p>8</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="9"><text:p>9</text:p></table:table-cell>
+          <table:table-cell table:formula="of:=SUM([.A4:.B4])" office:value-type="float" office:value="15"><text:p>15</text:p></table:table-cell>
+        </table:table-row>
+
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="10"><text:p>10</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="11"><text:p>11</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="12"><text:p>12</text:p></table:table-cell>
+          <table:table-cell table:formula="of:=SUM([.A5:.C5])" office:value-type="float" office:value="33"><text:p>33</text:p></table:table-cell>
+        </table:table-row>
+
+        <table:table-row>
+          <table:table-cell office:value-type="float" office:value="13"><text:p>13</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="14"><text:p>14</text:p></table:table-cell>
+          <table:table-cell office:value-type="float" office:value="15"><text:p>15</text:p></table:table-cell>
+          <table:table-cell table:formula="of:=SUM([.A6:.C6])" office:value-type="float" office:value="42"><text:p>42</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

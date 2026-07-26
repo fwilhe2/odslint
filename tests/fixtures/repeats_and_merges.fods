@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Loader torture test. Everything in here is legal ODF that a naive parser gets
+  wrong: content-carrying repeats, the million-row padding row LibreOffice
+  writes, merged cells with their covered placeholders, nested row groups, and
+  annotation text that must not leak into the cell value.
+-->
+<office:document
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+    xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+    xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
+    office:version="1.3"
+    office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+  <office:automatic-styles>
+    <style:style style:name="ta_hidden" style:family="table">
+      <style:table-properties table:display="false"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Grid">
+        <table:table-column table:number-columns-repeated="5"/>
+
+        <!-- Row 1: one element, three logical cells (A1, B1, C1). -->
+        <table:table-row>
+          <table:table-cell table:number-columns-repeated="3" office:value-type="string"><text:p>x</text:p></table:table-cell>
+          <table:table-cell table:number-columns-repeated="1021"/>
+        </table:table-row>
+
+        <!-- Row 2: A2:B2 merged, so C2 sits at column index 2, not 1. -->
+        <table:table-row>
+          <table:table-cell table:number-columns-spanned="2" table:number-rows-spanned="1" office:value-type="string"><text:p>merged</text:p></table:table-cell>
+          <table:covered-table-cell/>
+          <table:table-cell office:value-type="string"><text:p>after</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- Rows 3-4: one element, two logical rows. -->
+        <table:table-row table:number-rows-repeated="2">
+          <table:table-cell office:value-type="float" office:value="7"><text:p>7</text:p></table:table-cell>
+        </table:table-row>
+
+        <!-- Row 5, inside a group: an annotation carrying a suppression, whose
+             text must not become the cell's value. -->
+        <table:table-row-group>
+          <table:table-row>
+            <table:table-cell office:value-type="float" office:value="42">
+              <office:annotation>
+                <text:p>checked by finance</text:p>
+                <text:p>odslint-disable formula/magic-number</text:p>
+              </office:annotation>
+              <text:p>42</text:p>
+            </table:table-cell>
+          </table:table-row>
+        </table:table-row-group>
+
+        <!-- The padding row every LibreOffice file ends with. A parser that
+             materializes this allocates a million rows of nothing. -->
+        <table:table-row table:number-rows-repeated="1048571">
+          <table:table-cell table:number-columns-repeated="1024"/>
+        </table:table-row>
+      </table:table>
+
+      <table:table table:name="Hidden" table:style-name="ta_hidden">
+        <table:table-row>
+          <table:table-cell office:value-type="string"><text:p>tucked away</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>
