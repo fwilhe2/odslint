@@ -67,9 +67,13 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Install LibreOffice Calc
+        # The python script provider and python3-uno are only *recommends* of
+        # libreoffice-calc, but without them Calc aborts the conversion batch on
+        # the first fixture carrying an office:annotation.
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libreoffice-calc
+          sudo apt-get install --no-install-recommends -y \
+            libreoffice-calc libreoffice-script-provider-python python3-uno
 
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
