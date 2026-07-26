@@ -21,9 +21,14 @@ budget.ods:Totals!D4: error [formula/inconsistent-in-range] formula '=SUM([.A4:.
 ## Install
 
 ```console
+uv tool install git+https://github.com/fwilhe2/odslint      # odslint on your PATH
+uvx --from git+https://github.com/fwilhe2/odslint odslint   # one-off, nothing installed
+
 uv sync          # development
 uv run odslint --help
 ```
+
+Both entry points, `odslint` and `odslint-clean`, come with the install.
 
 ## Rules
 
