@@ -44,7 +44,7 @@ jobs:
       - run: uv build
 
       - name: Check the wheel carries both licenses
-        # The vendored flat_odf_cleanup.py is MPL-2.0 and may not ship without
+        # The forked flat_odf_cleanup.py is MPL-2.0 and may not ship without
         # its license text; a wheel missing it is not distributable.
         run: |
           python3 - <<'PY'

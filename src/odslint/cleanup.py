@@ -9,9 +9,10 @@ a ``.fods`` without cleaning it first produces enormous diffs for a one-cell
 edit, which is exactly what the "fixtures are text, never checked-in binaries"
 convention is trying to avoid.
 
-The cleanup itself is LibreOffice's own ``bin/flat-odf-cleanup.py``, vendored
-verbatim under the MPL-2.0 at :mod:`odslint.vendor.flat_odf_cleanup` (see that
-package's docstring). This module is the typed wrapper around it.
+The cleanup engine is :mod:`odslint.vendor.flat_odf_cleanup`, a fork of
+LibreOffice's ``bin/flat-odf-cleanup.py`` under the MPL-2.0 whose canonical home
+is this repository (see that package's docstring, and the README for what the
+fork adds). This module is the typed wrapper around it.
 
 Two things to know before pointing it at a document you care about:
 
@@ -62,11 +63,11 @@ def clean_bytes(data: bytes, *, verbose: bool = False) -> bytes:
     if root.tag != "{urn:oasis:names:tc:opendocument:xmlns:office:1.0}document":
         raise CleanupError(f"root element is {root.tag}, expected office:document")
 
-    # The vendored script is a script: it reads ``VERBOSE`` and ``root`` as
+    # The forked script is a script: it reads ``VERBOSE`` and ``root`` as
     # module globals rather than taking them as arguments (``collect_all_attribute``
     # closes over the ``root`` its ``__main__`` block sets). Priming both here is
-    # the price of keeping the file byte-identical to upstream. Not reentrant,
-    # which is fine — cleaning is a single-threaded CLI operation.
+    # the price of keeping it shaped like upstream. Not reentrant, which is
+    # fine — cleaning is a single-threaded CLI operation.
     previous_verbose = _vendor.VERBOSE
     _vendor.VERBOSE = verbose
     _vendor.root = root
