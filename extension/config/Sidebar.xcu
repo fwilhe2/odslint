@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<oor:component-data
+    xmlns:oor="http://openoffice.org/2001/registry"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    oor:name="Sidebar"
+    oor:package="org.openoffice.Office.UI">
+  <node oor:name="Content">
+
+    <node oor:name="DeckList">
+      <node oor:name="OdslintDeck" oor:op="replace">
+        <prop oor:name="Title" oor:type="xs:string">
+          <value xml:lang="en-US">odslint</value>
+        </prop>
+        <prop oor:name="Id" oor:type="xs:string">
+          <value>OdslintDeck</value>
+        </prop>
+        <prop oor:name="IconURL" oor:type="xs:string">
+          <value>private:graphicrepository/sc/res/lc06301.png</value>
+        </prop>
+        <!-- Calc only. -->
+        <prop oor:name="ContextList">
+          <value oor:separator=";">Calc, any, visible ;</value>
+        </prop>
+        <prop oor:name="OrderIndex" oor:type="xs:int">
+          <value>800</value>
+        </prop>
+      </node>
+    </node>
+
+    <node oor:name="PanelList">
+      <node oor:name="OdslintPanel" oor:op="replace">
+        <prop oor:name="Title" oor:type="xs:string">
+          <value xml:lang="en-US">Problems</value>
+        </prop>
+        <prop oor:name="Id" oor:type="xs:string">
+          <value>OdslintPanel</value>
+        </prop>
+        <prop oor:name="DeckId" oor:type="xs:string">
+          <value>OdslintDeck</value>
+        </prop>
+        <prop oor:name="ContextList">
+          <value oor:separator=";">Calc, any, visible ;</value>
+        </prop>
+        <prop oor:name="OrderIndex" oor:type="xs:int">
+          <value>100</value>
+        </prop>
+        <!-- Resolved through the UIElementFactory registered in Factories.xcu:
+             private:resource/toolpanel/<factory name>/<panel id>. -->
+        <prop oor:name="ImplementationURL" oor:type="xs:string">
+          <value>private:resource/toolpanel/OdslintPanelFactory/OdslintPanel</value>
+        </prop>
+      </node>
+    </node>
+
+  </node>
+</oor:component-data>

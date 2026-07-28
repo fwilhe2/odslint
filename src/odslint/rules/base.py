@@ -1,7 +1,10 @@
 """Rule base class and registry.
 
-Rules are pure: they read the model and yield diagnostics, never mutate. Any
-future autofix layer belongs downstream of the diagnostics, not inside a rule.
+Rules are pure: they read the model and yield diagnostics, never mutate. A rule
+may attach a :class:`~odslint.diagnostics.Fix` describing the edit that would
+resolve its finding, but *applying* that edit belongs downstream — in
+:mod:`odslint.fixer` for files, and in the LibreOffice extension for a document
+open in Calc.
 
 Severity on a yielded diagnostic is a placeholder — the engine overwrites it
 with the configured severity, so rules should not think about configuration.
@@ -12,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
-from odslint.diagnostics import Diagnostic, Severity
+from odslint.diagnostics import Diagnostic, Fix, Severity
 from odslint.model import Cell, Document, Sheet
 
 
@@ -41,6 +44,7 @@ class Rule:
         cell: Cell | None,
         message: str,
         hint: str | None = None,
+        fix: Fix | None = None,
     ) -> Diagnostic:
         return Diagnostic(
             rule_id=self.id,
@@ -50,6 +54,7 @@ class Rule:
             message=message,
             hint=hint,
             severity=self.default_severity,
+            fix=fix,
         )
 
     def option(self, name: str) -> Any:

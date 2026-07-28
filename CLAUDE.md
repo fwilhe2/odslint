@@ -27,8 +27,15 @@ uv run odslint --format json path.ods      # machine-readable
 uv run odslint --rule formula/magic-number path.ods   # one rule only
 uv run odslint --list-rules
 
+uv run odslint --fix path.ods              # apply safe fixes
+uv run odslint --fix --unsafe-fixes p.ods  # ...and the rest
+uv run odslint --diff path.ods             # preview, write nothing
+
 uv run odslint-clean tests/fixtures/*.fods # normalize flat XML in place
 uv run odslint-clean --check path.fods     # exit 1 if it would change
+
+python tools/build_oxt.py                  # -> dist/odslint-VERSION.oxt
+unopkg add --force dist/odslint-*.oxt
 
 uv run pytest                              # full suite (~3s)
 uv run pytest tests/rules/test_magic_number.py::test_flags_a_hardcoded_rate
@@ -46,16 +53,28 @@ error (unreadable file, bad config).
 ```
 src/odslint/
   loader.py      ods (zip) + fods (flat) -> model.  All format quirks live here.
+                 Also owns iter_row_runs / iter_cell_runs, the repeat-aware walk
+                 the fixer reuses — there must be exactly one of those.
   model.py       Document / Sheet / Cell / NamedExpression / CellRange
-  formula/       lexer.py (tokens + call contexts), reference.py, normalize.py (R1C1)
+  diagnostics.py Severity, Diagnostic, and the Fix / Edit / Applicability trio
+  formula/       lexer.py (tokens + call contexts), reference.py, normalize.py (R1C1),
+                 edit.py (splice, translate, to_a1)
   rules/         base.py + one module per rule, self-registering via @register
   config.py      .odslintrc.toml discovery and validation
   suppress.py    cell-annotation directives
   engine.py      load -> rules -> suppression -> sorted diagnostics
+  fixer.py       Edits -> XML.  Locates cells, splits repeats, writes.
+  package.py     .ods ZIP rewriting that preserves every part it did not touch
   report.py      text and json
   cli.py
-  cleanup.py     odslint-clean: the one thing here that writes to a file
+  cleanup.py     odslint-clean: churn removal, unrelated to diagnostics
   vendor/        forked-from-elsewhere code, under its own license
+
+extension/       the LibreOffice Calc add-on, built into an .oxt
+  python/odslint_ext.py             UNO glue: dispatch, sidebar panel, highlight
+  python/pythonpath/odslint_core.py pure logic, unit-testable without UNO
+  config/*.xcu                      menu, protocol handler, sidebar deck
+tools/build_oxt.py
 ```
 
 Rules are pure: they read the model and yield `Diagnostic`s, never mutate. Severity on a yielded
@@ -186,6 +205,36 @@ only thing that catches it.
 `office:annotation`, reporting only `Error: source file could not be loaded`. Strip the venv from
 `PATH` (see `_soffice_env`) or you will spend an hour blaming your fixtures.
 
+## The LibreOffice extension
+
+`extension/` is a Calc add-on. It **shells out to the `odslint` CLI** and reads `--format json`;
+it imports nothing from this package. That is not laziness — LibreOffice's Python is the platform
+interpreter, not the project venv, and `lxml` is a C extension that would have to match whatever
+ABI a given LibreOffice build shipped. The JSON report is therefore a real API: changing its shape
+breaks the extension.
+
+To lint unsaved edits it `storeToURL`s the live document to a temp `.fods` with the
+`OpenDocument Spreadsheet Flat XML` filter and lints that.
+
+Four things cost an hour each to rediscover:
+
+- **`odslint_core.py` must live in `python/pythonpath/`.** LibreOffice's component loader `exec`s
+  the component with its own directory *off* `sys.path`, so a sibling import fails at registration.
+  It fails silently, as an extension that installs and then does nothing. `pythonloader.py` adds a
+  `pythonpath` directory beside the component automatically.
+- **Dependencies go in the `lo:` namespace.** `OpenOffice.org-minimal-version` stopped at 4.x when
+  LibreOffice forked, so asking it for 7.0 is unsatisfiable and `unopkg` refuses to install.
+- **A pyuno IDL attribute is a Python attribute, not a getter.** `XToolPanel.Window` has to be set
+  as `self.Window`; a `getWindow` method alone fails with "Property Window is unknown" the moment
+  the sidebar deck opens.
+- **`unopkg` blocks on a profile a running `soffice` holds.** Install before starting the office,
+  or the test hangs with no output.
+
+`tests/uno_smoke.py` drives all of this against a real LibreOffice — install, lint, highlight,
+fix, undo, navigate, panel construction. It runs under the *system* Python (the venv cannot
+`import uno`), so `tests/test_extension_uno.py` shells out to it and skips when there is no
+LibreOffice. `tests/test_extension.py` covers `odslint_core` with ordinary pytest.
+
 ## Rule backlog
 
 Worth building next, roughly in value order. Several are cheap now that the loader and lexer exist.
@@ -207,6 +256,33 @@ Worth building next, roughly in value order. Several are cheap now that the load
 - `perf/whole-column-reference` (`Reference.is_whole_column` exists),
   `meta/iterative-calculation-enabled` (`Document.settings`)
 
-Deferred by design: **autofix**. Rules stay pure and diagnostics stay the output; a fixer would sit
-downstream and must preserve unknown ZIP parts byte-for-byte. `odslint-clean` is not a step towards
-it — it rewrites a document without ever consulting a diagnostic.
+## Autofix
+
+A rule may attach a `Fix` to a diagnostic. Rules are still pure — a `Fix` is a *description* of an
+edit, and applying it is somebody else's job. That indirection is what lets one fix be applied two
+ways: `fixer.py` rewrites the XML of a file, and the Calc extension replays the same `Edit` objects
+through UNO against an open document.
+
+`Applicability.SAFE` means the recalculated result cannot change (`--fix` applies these);
+`UNSAFE` means it can (`--unsafe-fixes`). A rule that cannot express its fix unambiguously must
+offer none — `data/number-stored-as-text` flags `1,234` but refuses to convert it, because that is
+1234 in one locale and 1.234 in another.
+
+Things that will bite you here:
+
+- **An `Edit` carries a formula twice.** `formula` is the stored ODF form (`=SUM([.A4:.C4])`);
+  `formula_a1` is Calc's own A1 convention (`=SUM(A4:C4)`). `XCell.setFormula` needs the second and
+  does not reject the first — it silently stores a formula that evaluates to 0. `formula/edit.py:to_a1`
+  is the conversion, and the only difference between the two spellings is reference qualification.
+- **Editing one cell of a repeat means splitting the run.** `fixer._split_run` breaks a
+  `number-columns-repeated` / `-rows-repeated` element into up to three so the change lands on one
+  cell. Check any change here against `repeats_and_merges.fods` first.
+- **lxml does not preserve newlines inside a start tag.** Re-serializing a file that has been through
+  `odslint-clean` would collapse every tag it split, so `fixer._keeps_split_attributes` detects the
+  cleaned layout and re-applies the same cosmetic pass. A file with mixed layout gets normalized to
+  one or the other; that is accepted.
+- **A cached `office:value` is left stale** after a formula fix. Calc recalculates on open (verified),
+  and a missing value reads worse than a stale one in tools that never recalculate.
+
+Still deferred: fixes that need to *add* document structure, such as `prefer-named-range` on a
+constant with no name — that would have to write a `table:named-range` element, not just a cell.

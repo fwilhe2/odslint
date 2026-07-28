@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from odslint.config import Config
@@ -28,7 +28,7 @@ def select_rules(config: Config, only: Iterable[str] | None = None) -> list[Rule
     return rules
 
 
-def lint_document(doc: Document, config: Config, rules: list[Rule]) -> list[Diagnostic]:
+def lint_document(doc: Document, config: Config, rules: Sequence[Rule]) -> list[Diagnostic]:
     suppressions = build_index(doc)
     out: list[Diagnostic] = []
 
@@ -45,7 +45,7 @@ def lint_document(doc: Document, config: Config, rules: list[Rule]) -> list[Diag
 
 
 def lint_file(
-    path: str | Path, config: Config, rules: list[Rule] | None = None
+    path: str | Path, config: Config, rules: Sequence[Rule] | None = None
 ) -> list[Diagnostic]:
     doc = load(path)
     return lint_document(doc, config, rules if rules is not None else select_rules(config))

@@ -12,6 +12,8 @@ the logical index, and content-carrying runs are capped at :data:`MAX_REPEAT`.
 from __future__ import annotations
 
 import zipfile
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +102,59 @@ _VALUE_ATTRS = {
 
 class LoadError(Exception):
     """The file could not be read as an ODF spreadsheet."""
+
+
+# -- shared traversal ------------------------------------------------------
+#
+# The loader materializes these runs into model cells; the fixer walks them to
+# find the element behind one logical cell. Both need identical repeat and
+# covered-cell arithmetic, and getting it wrong is *the* classic ODS parser bug,
+# so there is exactly one implementation and both call it.
+
+
+@dataclass(frozen=True)
+class Run:
+    """An element and the span of logical row/column indices it covers."""
+
+    element: etree._Element
+    index: int
+    repeat: int
+
+    @property
+    def end(self) -> int:
+        """One past the last index this run covers."""
+        return self.index + self.repeat
+
+    def covers(self, index: int) -> bool:
+        return self.index <= index < self.end
+
+
+def iter_row_runs(table: etree._Element) -> Iterator[Run]:
+    """Row elements of a sheet with their logical row indices.
+
+    ``iter`` rather than ``iterchildren``: rows may be nested in
+    ``table:table-row-group`` / ``table:table-header-rows``, and document order
+    is exactly the visual order.
+    """
+    index = 0
+    for row_el in table.iter(TABLE_ROW):
+        repeat = _int_attr(row_el, A_ROWS_REPEATED, 1)
+        yield Run(row_el, index, repeat)
+        index += repeat
+
+
+def iter_cell_runs(row_el: etree._Element) -> Iterator[Run]:
+    """Cell elements of a row with their logical column indices.
+
+    ``table:covered-table-cell`` elements are included: they carry no content,
+    but they consume column indices, and skipping them shifts every cell to
+    their right one column left.
+    """
+    index = 0
+    for cell_el in row_el.iterchildren(TABLE_CELL, COVERED_CELL):
+        repeat = _int_attr(cell_el, A_COLS_REPEATED, 1)
+        yield Run(cell_el, index, repeat)
+        index += repeat
 
 
 def load(path: str | Path) -> Document:
@@ -197,29 +252,23 @@ def _parse_sheet(
         hidden=table.get(A_STYLE_NAME) in hidden_styles,
     )
 
-    row_index = 0
-    # ``iter`` rather than ``iterchildren``: rows may be nested in
-    # table:table-row-group / table:table-header-rows, and document order is
-    # exactly the visual order.
-    for row_el in table.iter(TABLE_ROW):
-        if row_index >= MAX_ROWS:
+    for run in iter_row_runs(table):
+        if run.index >= MAX_ROWS:
             warnings.append(f"{name}: stopped at row {MAX_ROWS}")
             break
-        repeat = _int_attr(row_el, A_ROWS_REPEATED, 1)
-        cells = _parse_row(row_el, name, warnings)
+        cells = _parse_row(run.element, name, warnings)
         if not cells:
-            row_index += repeat
             continue
-        copies = min(repeat, MAX_REPEAT)
-        if copies < repeat:
+        copies = min(run.repeat, MAX_REPEAT)
+        if copies < run.repeat:
             warnings.append(
-                f"{name}: row {row_index + 1} repeats {repeat}x with content; "
+                f"{name}: row {run.index + 1} repeats {run.repeat}x with content; "
                 f"only the first {copies} were analyzed"
             )
         for offset in range(copies):
             for col, proto in cells:
-                sheet.cells[(row_index + offset, col)] = Cell(
-                    row=row_index + offset,
+                sheet.cells[(run.index + offset, col)] = Cell(
+                    row=run.index + offset,
                     col=col,
                     value_type=proto.value_type,
                     value=proto.value,
@@ -230,7 +279,6 @@ def _parse_sheet(
                     rows_spanned=proto.rows_spanned,
                     cols_spanned=proto.cols_spanned,
                 )
-        row_index += repeat
 
     for container in table.iterchildren(NAMED_EXPRESSIONS):
         sheet.named_expressions.extend(_parse_named_expressions(container, scope=name))
@@ -243,26 +291,22 @@ def _parse_row(
 ) -> list[tuple[int, Cell]]:
     """Non-empty cells of a row as ``(column, cell)``; empty runs are skipped."""
     out: list[tuple[int, Cell]] = []
-    col = 0
-    for cell_el in row_el.iterchildren(TABLE_CELL, COVERED_CELL):
-        if col >= MAX_COLS:
+    for run in iter_cell_runs(row_el):
+        if run.index >= MAX_COLS:
             break
-        repeat = _int_attr(cell_el, A_COLS_REPEATED, 1)
-        cell = _parse_cell(cell_el, 0, col)
+        cell = _parse_cell(run.element, 0, run.index)
         if cell.is_empty:
             # Includes covered cells of a merge and the trailing padding run
             # that every LibreOffice row ends with.
-            col += repeat
             continue
-        copies = min(repeat, MAX_REPEAT)
-        if copies < repeat:
+        copies = min(run.repeat, MAX_REPEAT)
+        if copies < run.repeat:
             warnings.append(
-                f"{sheet_name}: a cell repeats {repeat}x with content; "
+                f"{sheet_name}: a cell repeats {run.repeat}x with content; "
                 f"only the first {copies} were analyzed"
             )
         for offset in range(copies):
-            out.append((col + offset, cell))
-        col += repeat
+            out.append((run.index + offset, cell))
     return out
 
 

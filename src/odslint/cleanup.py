@@ -86,10 +86,10 @@ def clean_bytes(data: bytes, *, verbose: bool = False) -> bytes:
     if etree.tostring(etree.fromstring(formatted)) != etree.tostring(etree.fromstring(serialized)):
         raise CleanupError("attribute reformatting changed the document structure")
 
-    return _assemble(root, formatted)
+    return assemble(root, formatted)
 
 
-def _assemble(root: etree._Element, body: bytes) -> bytes:
+def assemble(root: etree._Element, body: bytes) -> bytes:
     """Wrap the serialized root back up into a whole document.
 
     Upstream serializes the root element alone, which quietly drops any comment

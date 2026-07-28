@@ -14,14 +14,32 @@ the rule unusable on real sheets.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
-from odslint.diagnostics import Diagnostic, Severity
+from odslint.diagnostics import Applicability, Diagnostic, Fix, Severity
+from odslint.formula.edit import formula_edit, replace_token_text
 from odslint.formula.lexer import lex
 from odslint.formula.reference import resolve
 from odslint.model import NUMERIC_TYPES, CellRange, Document, Sheet, a1
 from odslint.rules.base import Rule, register
+
+#: A name Calc will accept bare in a formula. Anything else has to go through
+#: the explicit ``$$'...'`` form.
+_PLAIN_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*\Z")
+
+
+def name_in_formula(name: str) -> str:
+    """How ``name`` must be spelled inside a formula.
+
+    LibreOffice's canonical form is the bare identifier — it rewrites
+    ``[$$TaxRate]`` and ``$$TaxRate`` to plain ``TaxRate`` on save — so that is
+    what a fix should produce.
+    """
+    if _PLAIN_NAME_RE.match(name):
+        return name
+    return "$$'" + name.replace("'", "''") + "'"
 
 
 def suggest_name(label: str) -> str | None:
@@ -73,12 +91,27 @@ class PreferNamedRange(Rule):
 
                     existing = by_range.get(target)
                     if existing is not None:
+                        spelled = name_in_formula(existing)
                         yield self.diag(
                             sheet,
                             cell,
                             f"references {target} directly, but the named expression "
                             f"{existing!r} already covers exactly that range",
-                            hint=f"replace {token.text} with {existing}",
+                            hint=f"replace {token.text} with {spelled}",
+                            # Safe: the name covers exactly this range, so the
+                            # calculated result cannot change.
+                            fix=Fix(
+                                title=f"replace {token.text} with {spelled}",
+                                applicability=Applicability.SAFE,
+                                edits=(
+                                    formula_edit(
+                                        sheet.name,
+                                        cell.row,
+                                        cell.col,
+                                        replace_token_text(cell.formula, token.text, spelled),
+                                    ),
+                                ),
+                            ),
                         )
                         continue
 

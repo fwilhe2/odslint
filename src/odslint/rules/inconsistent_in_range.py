@@ -13,7 +13,8 @@ from collections import Counter
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
-from odslint.diagnostics import Diagnostic, Severity
+from odslint.diagnostics import Applicability, Diagnostic, Fix, Severity
+from odslint.formula.edit import formula_edit, translate
 from odslint.formula.normalize import normalize_r1c1
 from odslint.model import Cell, Document, Sheet, a1
 from odslint.rules.base import Rule, register
@@ -70,7 +71,26 @@ class InconsistentInRange(Rule):
                 f"({majority_count} of {len(run)} cells share one shape)",
                 hint=f"the block otherwise reads like {example.formula!r} in "
                 f"{a1(example.row, example.col)}",
+                fix=_fix_from(sheet, cell, example),
             )
+
+
+def _fix_from(sheet: Sheet, cell: Cell, example: Cell) -> Fix | None:
+    """Rewrite ``cell`` as the majority formula, filled to this position.
+
+    Unsafe by construction: the rule found a cell that disagrees with its block,
+    but it cannot know whether the block is right and the cell is a typo, or the
+    cell is a deliberate exception. Applying this asserts the former.
+    """
+    assert example.formula is not None
+    filled = translate(example.formula, example.row, example.col, cell.row, cell.col)
+    if filled is None or filled == cell.formula:
+        return None
+    return Fix(
+        title=f"rewrite as {filled}, matching the rest of the block",
+        applicability=Applicability.UNSAFE,
+        edits=(formula_edit(sheet.name, cell.row, cell.col, filled),),
+    )
 
 
 def _runs(sheet: Sheet, min_run: int) -> Iterator[list[Cell]]:

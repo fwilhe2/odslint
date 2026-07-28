@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 
+import pytest
+
 from helpers import fixture
 from odslint.cli import EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
 
@@ -138,3 +140,105 @@ def test_multiple_files_are_linted_together(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "magic_numbers.fods" in out
     assert "text_numbers.fods" in out
+
+
+# -- autofix ---------------------------------------------------------------
+
+
+def _copy(tmp_path, name):
+    target = tmp_path / name
+    shutil.copy(fixture(name), target)
+    return target
+
+
+def test_fix_applies_the_safe_tier_and_reports_the_rest(tmp_path, capsys):
+    path = _copy(tmp_path, "named_ranges.fods")
+    assert main([str(path), "--fix"]) == EXIT_FINDINGS
+    out = capsys.readouterr().out
+
+    assert "Fixed 1 problem." in out
+    # The fixed finding is gone; the ones with no mechanical fix remain.
+    assert "already covers exactly that range" not in out
+    assert "formula/magic-number" in out
+    assert "of:=TaxRate*100" in path.read_text()
+
+
+def test_fix_is_idempotent(tmp_path, capsys):
+    path = _copy(tmp_path, "named_ranges.fods")
+    main([str(path), "--fix"])
+    capsys.readouterr()
+    after_first = path.read_bytes()
+
+    main([str(path), "--fix"])
+    assert "Fixed" not in capsys.readouterr().out
+    assert path.read_bytes() == after_first
+
+
+def test_diff_previews_without_writing(tmp_path, capsys):
+    path = _copy(tmp_path, "named_ranges.fods")
+    before = path.read_bytes()
+
+    assert main([str(path), "--diff"]) == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert '-          <table:table-cell table:formula="of:=[.$B$1]*100"' in out
+    assert '+          <table:table-cell table:formula="of:=TaxRate*100"' in out
+    assert path.read_bytes() == before
+
+
+def test_diff_on_a_file_with_nothing_to_fix_exits_zero(tmp_path, capsys):
+    path = _copy(tmp_path, "magic_numbers.fods")
+    assert main([str(path), "--diff"]) == EXIT_OK
+    assert capsys.readouterr().out == ""
+
+
+def test_fix_and_diff_together_are_rejected(tmp_path, capsys):
+    path = _copy(tmp_path, "named_ranges.fods")
+    with pytest.raises(SystemExit) as exc:
+        main([str(path), "--fix", "--diff"])
+    assert exc.value.code == EXIT_ERROR
+    assert "mutually exclusive" in capsys.readouterr().err
+
+
+def test_fixable_findings_are_marked_and_counted(capsys):
+    main([str(fixture("named_ranges.fods"))])
+    out = capsys.readouterr().out
+    assert "[formula/prefer-named-range] [*]" in out
+    assert "1 fixable with --fix" in out
+
+
+def test_json_carries_the_fix_payload(capsys):
+    main([str(fixture("named_ranges.fods")), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    fixes = [d["fix"] for d in payload if d["fix"]]
+    assert len(fixes) == 1
+    assert fixes[0]["applicability"] == "safe"
+    assert fixes[0]["edits"] == [
+        {
+            "sheet": "Model",
+            "row": 0,
+            "column": 3,
+            "kind": "formula",
+            "formula": "=TaxRate*100",
+            "formula_a1": "=TaxRate*100",
+            "value": None,
+            "text": None,
+        }
+    ]
+
+
+def test_fix_restores_the_original_when_a_pass_fails(tmp_path, capsys, monkeypatch):
+    """A fixer that leaves a spreadsheet unopenable is worse than one that does
+    nothing, so a failure has to roll the file back."""
+    from odslint import cli
+    from odslint.fixer import FixError
+
+    path = _copy(tmp_path, "named_ranges.fods")
+    before = path.read_bytes()
+
+    def explode(*args, **kwargs):
+        path.write_bytes(b"wrecked")
+        raise FixError("boom")
+
+    monkeypatch.setattr(cli, "fix_file", explode)
+    assert main([str(path), "--fix"]) == EXIT_ERROR
+    assert path.read_bytes() == before

@@ -101,3 +101,39 @@ def test_majority_ratio_is_configurable(tmp_path):
     )
     assert run_rule(doc, RULE) == []
     assert len(run_rule(doc, RULE, majority_ratio=0.5)) == 2
+
+
+# -- fixes ------------------------------------------------------------------
+
+
+def test_the_outlier_is_rewritten_as_the_majority_filled_to_its_row():
+    from odslint.diagnostics import Applicability
+
+    doc = load(fixture("inconsistent_formulas.fods"))
+    found = run_rule(doc, RULE)
+    assert len(found) == 1
+
+    fix = found[0].fix
+    assert fix is not None
+    assert fix.applicability is Applicability.UNSAFE
+    # D2 reads =SUM([.A2:.C2]); at D4 that becomes =SUM([.A4:.C4]).
+    assert fix.edits[0].formula == "=SUM([.A4:.C4])"
+    assert (fix.edits[0].row, fix.edits[0].col) == (3, 3)
+
+
+def test_no_fix_when_the_majority_formula_cannot_be_moved(tmp_path):
+    """A block whose exemplar holds a dead reference has no trustworthy fill."""
+    doc = build(
+        tmp_path,
+        {
+            "S": [
+                [num(1), formula("=[#REF!]+1")],
+                [num(2), formula("=[#REF!]+1")],
+                [num(3), formula("=[#REF!]+1")],
+                [num(4), formula("=99")],
+            ]
+        },
+    )
+    found = run_rule(doc, RULE)
+    assert len(found) == 1
+    assert found[0].fix is None

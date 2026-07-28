@@ -42,6 +42,9 @@ class RefPart:
     col_abs: bool
     row: int | None
     row_abs: bool
+    #: Whether the sheet name was written ``'quoted'``. ``sheet`` always holds
+    #: the unquoted name, so writing one back out needs this to round-trip.
+    sheet_quoted: bool = False
 
     @property
     def is_complete(self) -> bool:
@@ -135,6 +138,7 @@ def parse_ref_part(text: str) -> RefPart | None:
         col_abs=bool(match.group("col_abs")),
         row=int(row_text) - 1 if row_text else None,
         row_abs=bool(match.group("row_abs")),
+        sheet_quoted=sheet_raw.startswith("'"),
     )
 
 
@@ -229,3 +233,52 @@ def format_a1(part: RefPart) -> str:
     row = str(part.row + 1) if part.row is not None else ""
     prefix = f"{part.sheet}." if part.sheet else ""
     return f"{prefix}{col}{row}"
+
+
+def _quote_sheet(name: str) -> str:
+    return "'" + name.replace("'", "''") + "'"
+
+
+def format_ref_part(part: RefPart, *, odf: bool = True) -> str:
+    """Render one corner back into source form, ``$`` markers and all.
+
+    The inverse of :func:`parse_ref_part`, exact enough to round-trip: column
+    letters come back uppercase, which is what LibreOffice writes anyway.
+
+    ``odf=True`` gives the form that goes inside ``[...]`` in a stored formula,
+    where a same-sheet reference is still dot-qualified (``.A1``). ``odf=False``
+    gives Calc's own A1 convention, where it is not (``A1``) — that is the
+    spelling ``XCell.setFormula`` expects, and the two differ *only* here.
+    """
+    out = ""
+    if part.sheet is not None:
+        if part.sheet_abs:
+            out += "$"
+        out += _quote_sheet(part.sheet) if part.sheet_quoted else part.sheet
+        out += "."
+    elif odf:
+        out += "."
+    if part.col is not None:
+        if part.col_abs:
+            out += "$"
+        out += col_letters(part.col)
+    if part.row is not None:
+        if part.row_abs:
+            out += "$"
+        out += str(part.row + 1)
+    return out
+
+
+def format_reference(ref: Reference, *, odf: bool = True) -> str:
+    """The text of a reference, with or without ODF's dot qualification.
+
+    Only defined for references that :func:`resolve` can reason about — an
+    external or dead reference has source syntax this does not reproduce, and
+    rewriting one is never what a caller wants.
+    """
+    if ref.invalid or ref.external is not None or ref.start is None:
+        raise ValueError(f"cannot render an external or invalid reference: {ref.raw!r}")
+    out = format_ref_part(ref.start, odf=odf)
+    if ref.end is not None:
+        out += ":" + format_ref_part(ref.end, odf=odf)
+    return out

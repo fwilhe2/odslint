@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<description
+    xmlns="http://openoffice.org/extensions/description/2006"
+    xmlns:d="http://openoffice.org/extensions/description/2006"
+    xmlns:xlink="http://www.w3.org/1999/xlink">
+
+  <identifier value="de.fwilhe2.odslint"/>
+  <version value="0.1.0"/>
+
+  <display-name>
+    <name lang="en">odslint</name>
+  </display-name>
+
+  <extension-description>
+    <src lang="en" xlink:href="descriptions/en.txt"/>
+  </extension-description>
+
+  <publisher>
+    <name xlink:href="https://github.com/fwilhe2/odslint" lang="en">odslint</name>
+  </publisher>
+
+  <dependencies xmlns:lo="http://libreoffice.org/extensions/description/2011">
+    <!-- Must be the LibreOffice-namespaced element: the OpenOffice.org-minimal-version
+         scheme stopped at 4.x when LibreOffice forked, so asking for a 6.x or 7.x
+         version there is an unsatisfiable dependency and unopkg refuses to install.
+
+         7.0 is the floor because that is where the bundled Python reaches 3.8,
+         which is what the extension's own sources are written against. -->
+    <lo:LibreOffice-minimal-version value="7.0" d:name="LibreOffice 7.0"/>
+  </dependencies>
+
+  <!-- No <registration><simple-license>: that makes unopkg demand an
+       interactive click-through, which breaks scripted installs and CI for no
+       benefit. The MIT terms ship in registration/LICENSE regardless. -->
+</description>

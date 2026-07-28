@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -68,8 +69,11 @@ def _convert(tmp_path_factory, sources):
         env=_soffice_env(),
     )
 
+    # soffice exits 0 even when a document fails to load, so the only reliable
+    # check is whether the output actually appeared — for the sources we passed,
+    # which is not always the whole fixture set.
     missing = [
-        name for name in FIXTURE_NAMES if not (out / f"{name.removesuffix('.fods')}.ods").exists()
+        Path(source).name for source in sources if not (out / f"{Path(source).stem}.ods").exists()
     ]
     if missing:
         pytest.fail(f"LibreOffice did not convert {missing}: {result.stderr.strip()}")
@@ -137,3 +141,66 @@ def test_a_cleaned_fixture_still_opens_in_libreoffice(converted_after_cleanup, n
 
     reopened = converted_after_cleanup / f"{name.removesuffix('.fods')}.ods"
     assert signature(reopened) == signature(fixture(name))
+
+
+@pytest.fixture(scope="module")
+def converted_after_fix(tmp_path_factory):
+    """Every fixture with all fixes applied, then reopened by LibreOffice."""
+    from odslint.fixer import fix_file, plan_fixes
+
+    staged = tmp_path_factory.mktemp("fixed")
+    config = Config()
+    rules = select_rules(config)
+    sources = [shutil.copy(fixture(name), staged / name) for name in FIXTURE_NAMES]
+    for source in sources:
+        plan = plan_fixes(lint_file(source, config, rules), unsafe=True)
+        if plan.edits:
+            fix_file(source, plan.edits)
+    return _convert(tmp_path_factory, sources)
+
+
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_a_fixed_fixture_still_opens_in_libreoffice(converted_after_fix, name):
+    """A fix rewrites cell elements and splits repeated runs by hand.
+
+    Both are exactly the kind of edit a static reader accepts and Calc rejects,
+    and the linter cannot tell the difference on its own — only getting
+    LibreOffice to reopen the file proves the XML is still legal.
+    """
+    reopened = converted_after_fix / f"{name.removesuffix('.fods')}.ods"
+    document = load(reopened)
+    assert document.sheets, f"{name}: LibreOffice reopened the fixed file as empty"
+
+
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_fixing_resolves_the_findings_it_claimed_to(converted_after_fix, name):
+    """Whatever a fix said it would resolve must be gone once Calc has reopened
+    the file — not merely gone from our own reading of it."""
+    from odslint.fixer import plan_fixes
+
+    config = Config()
+    rules = select_rules(config)
+    reopened = converted_after_fix / f"{name.removesuffix('.fods')}.ods"
+
+    # Nothing that was fixable before may still be fixable after.
+    assert plan_fixes(lint_file(reopened, config, rules), unsafe=True).is_empty
+
+
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_fixing_a_real_package_keeps_it_openable(tmp_path_factory, converted, name):
+    """The ZIP writer has to preserve parts it never looked at. A package
+    LibreOffice produced is the only honest input for that."""
+    from odslint.fixer import fix_file, plan_fixes
+
+    staged = tmp_path_factory.mktemp("package")
+    source = shutil.copy(converted / f"{name.removesuffix('.fods')}.ods", staged)
+
+    config = Config()
+    rules = select_rules(config)
+    plan = plan_fixes(lint_file(source, config, rules), unsafe=True)
+    if not plan.edits:
+        pytest.skip(f"{name} has no fixes to apply")
+    fix_file(source, plan.edits)
+
+    reopened = _convert(tmp_path_factory, [source])
+    assert load(reopened / f"{name.removesuffix('.fods')}.ods").sheets

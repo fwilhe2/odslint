@@ -61,6 +61,74 @@ Both entry points, `odslint` and `odslint-clean`, come with the install.
 
 `odslint --list-rules` prints the live list.
 
+## Autofix
+
+Findings marked `[*]` carry a fix. `--fix` applies them and reports what is left:
+
+```console
+$ odslint --fix budget.ods
+budget.ods:Model!D1: warning [formula/magic-number] formula contains the literal 100
+    hint: move it to a labelled input cell and reference that cell by name
+1 problem (1 warning)
+Fixed 1 problem.
+```
+
+Fixes come in two tiers, and `--fix` only applies the first:
+
+| Tier | Meaning | Rules |
+| --- | --- | --- |
+| safe | Cannot change what the document calculates | `formula/prefer-named-range`, where a name already covers exactly that range |
+| unsafe | Changes a stored value, or picks between plausible intents | `formula/inconsistent-in-range`, `data/number-stored-as-text` |
+
+Add `--unsafe-fixes` to opt into the second tier, and use `--diff` to see what
+either would do without writing anything:
+
+```console
+odslint --diff budget.ods                  # preview; exits 1 if there is anything to apply
+odslint --fix --unsafe-fixes budget.ods    # apply everything
+```
+
+Both packagings are fixed in place. A `.fods` keeps its formatting, so the diff
+is the cells that changed; an `.ods` is rewritten entry by entry, so every part
+odslint does not understand — styles, settings, images, signatures — is copied
+through untouched.
+
+Two things worth knowing:
+
+- A rule only offers a fix when the fix is unambiguous. `data/number-stored-as-text`
+  flags `1,234` but will not convert it, because that is 1234 in en-US and 1.234
+  in de-DE and nothing in the cell settles it.
+- After an unsafe formula fix the cell's cached result is the old formula's.
+  LibreOffice recalculates on open; anything that reads cached values without
+  recalculating will see the stale one until it does.
+
+## In LibreOffice Calc
+
+The extension in `extension/` puts the same findings in Calc itself, anchored to
+the cells they are about.
+
+```console
+python tools/build_oxt.py          # -> dist/odslint-VERSION.oxt
+unopkg add --force dist/odslint-*.oxt
+```
+
+or install the `.oxt` through Tools ▸ Extension Manager. It needs the `odslint`
+command as well — the extension runs it rather than embedding it, because
+LibreOffice's Python is the platform interpreter and not the environment odslint
+is installed into. If `odslint` is not on your `PATH`, set its location in
+Tools ▸ odslint ▸ Settings.
+
+Then either open the **odslint** deck in the sidebar and press *Lint*, or use
+Tools ▸ odslint ▸ Lint This Sheet:
+
+- The document is linted as it is on screen, including edits you have not saved.
+- Selecting a finding jumps to its cell.
+- Flagged cells are tinted by severity. The tint is a real cell background, so
+  it is recorded before it is applied, restored by *Unhighlight*, and stripped
+  before any save — linting never leaves a mark in your file, and never marks a
+  clean document as modified.
+- *Fix* applies the fixes through Calc, so one Ctrl+Z reverts the batch.
+
 ## Configuration
 
 `.odslintrc.toml`, discovered upward from the file being linted:
@@ -145,9 +213,10 @@ around it.
 
 ## Scope
 
-Linting reasons statically over the stored document. It does not recalculate
-formulas, and it never writes to your files — `odslint-clean` is a separate
-command precisely because it does.
+Linting reasons statically over the stored document, and does not recalculate
+formulas. Plain `odslint` never writes to your files; the three commands that
+do are all explicit about it — `--fix` applies fixes, `odslint-clean` normalizes
+flat XML, and the Calc extension edits through Calc's own undo stack.
 
 ## Third-party code
 

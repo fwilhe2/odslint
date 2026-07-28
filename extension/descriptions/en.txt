@@ -1,0 +1,9 @@
+odslint checks a Calc spreadsheet for the mistakes a spreadsheet actually makes:
+a formula that breaks the pattern of the block around it, a number stored as
+text, a hardcoded rate buried in a formula, an address spelled out where a named
+range already exists.
+
+Tools > odslint > Lint This Sheet reports the findings, jumps to the cell behind
+each one, and can apply the mechanical fixes in a single undoable step.
+
+Requires the odslint command line tool:  pip install --user odslint

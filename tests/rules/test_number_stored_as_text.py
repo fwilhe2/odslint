@@ -70,3 +70,72 @@ def test_message_names_the_value(tmp_path):
 )
 def test_classify(text, expected):
     assert classify(text) == expected
+
+
+# -- fixes ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("1234", 1234.0),
+        ("-12", -12.0),
+        ("+7", 7.0),
+        ("12.5", 12.5),
+        ("12,5", 12.5),  # one separator, not three digits after: a decimal
+        ("1.234.567", 1234567.0),  # repeated separator: only grouping fits
+        ("1,234,567", 1234567.0),
+        ("1.234,56", 1234.56),  # rightmost separator wins
+        ("1,234.56", 1234.56),
+    ],
+)
+def test_parse_number_reads_unambiguous_values(text, expected):
+    from odslint.rules.number_stored_as_text import parse_number
+
+    assert parse_number(text) == expected
+
+
+@pytest.mark.parametrize("text", ["1,234", "1.234", "19%", "€5", "12 34", "", "n/a"])
+def test_parse_number_refuses_anything_it_could_get_wrong(text):
+    """A wrong number is worse than no fix: "1,234" is 1234 in en-US and 1.234
+    in de-DE, and nothing in the cell settles it."""
+    from odslint.rules.number_stored_as_text import parse_number
+
+    assert parse_number(text) is None
+
+
+def test_an_ambiguous_value_is_still_flagged_but_offers_no_fix(tmp_path):
+    doc = build(tmp_path, {"S": [[txt("1,234")]]})
+    found = run_rule(doc, RULE)
+    assert len(found) == 1
+    assert found[0].fix is None
+
+
+def test_an_unambiguous_value_offers_an_unsafe_fix(tmp_path):
+    from odslint.diagnostics import Applicability
+
+    doc = build(tmp_path, {"S": [[txt("12.5")]]})
+    found = run_rule(doc, RULE)
+    assert len(found) == 1
+    fix = found[0].fix
+    assert fix is not None
+    assert fix.applicability is Applicability.UNSAFE
+    assert fix.edits[0].kind == "number"
+    assert fix.edits[0].value == "12.5"
+
+
+def test_a_whole_number_is_written_without_a_trailing_zero(tmp_path):
+    doc = build(tmp_path, {"S": [[txt("1234")]]})
+    fix = run_rule(doc, RULE)[0].fix
+    assert fix is not None
+    assert fix.edits[0].value == "1234"
+
+
+def test_text_dates_are_flagged_but_not_fixed(tmp_path):
+    """Converting a date needs a number-format style, which the fixer does not
+    write, so the diagnostic stands alone."""
+    doc = build(tmp_path, {"S": [[txt("2024-01-15")]]})
+    found = run_rule(doc, RULE)
+    assert len(found) == 1
+    assert "date" in found[0].message
+    assert found[0].fix is None

@@ -123,3 +123,123 @@ def test_absolute_reference_keeps_its_anchor_in_the_fingerprint():
 def test_lexer_never_raises_on_garbage():
     for formula in ("=[", '="unterminated', "=SUM(", "=@#$", "="):
         assert isinstance(lex(formula), list)
+
+
+# -- translation ------------------------------------------------------------
+
+
+def _all_fixture_formulas():
+    """Every formula in every fixture, with the cell it lives in."""
+    from helpers import FIXTURES
+    from odslint.loader import load
+
+    out = []
+    for path in sorted(FIXTURES.glob("*.fods")):
+        for sheet in load(path).sheets:
+            for cell in sheet.formula_cells():
+                out.append((path.name, cell.formula, cell.row, cell.col))
+    return out
+
+
+@pytest.mark.parametrize("name,formula,row,col", _all_fixture_formulas())
+def test_translating_a_formula_nowhere_reproduces_it_exactly(name, formula, row, col):
+    """The faithful-writer property. If this fails, every translated formula is
+    subtly wrong in the same way."""
+    from odslint.formula.edit import translate
+
+    assert translate(formula, row, col, row, col) == formula
+
+
+def test_relative_references_move_and_absolute_ones_do_not():
+    from odslint.formula.edit import translate
+
+    # From B2 to B3: one row down.
+    assert translate("=[.A2]+[.$A$2]", 1, 1, 2, 1) == "=[.A3]+[.$A$2]"
+
+
+def test_a_mixed_reference_moves_only_its_relative_half():
+    from odslint.formula.edit import translate
+
+    assert translate("=[.$A2]", 1, 1, 2, 2) == "=[.$A3]"
+    assert translate("=[.A$2]", 1, 1, 2, 2) == "=[.B$2]"
+
+
+def test_ranges_move_both_corners():
+    from odslint.formula.edit import translate
+
+    assert translate("=SUM([.A1:.A5])", 5, 0, 6, 0) == "=SUM([.A2:.A6])"
+
+
+def test_cross_sheet_references_keep_their_sheet():
+    from odslint.formula.edit import translate
+
+    assert translate("=[Sheet2.A1]", 0, 0, 1, 0) == "=[Sheet2.A2]"
+    assert translate("=[$'Some Sheet'.$A$1]", 0, 0, 1, 0) == "=[$'Some Sheet'.$A$1]"
+
+
+def test_translation_refuses_to_move_off_the_sheet():
+    from odslint.formula.edit import translate
+
+    assert translate("=[.A1]", 5, 5, 0, 5) is None
+
+
+def test_translation_refuses_external_and_dead_references():
+    from odslint.formula.edit import translate
+
+    assert translate("=[#REF!]", 0, 0, 1, 0) is None
+    assert translate("=['file:///x.ods'#$S.A1]", 0, 0, 1, 0) is None
+
+
+def test_translation_leaves_names_and_literals_alone():
+    from odslint.formula.edit import translate
+
+    assert translate('=IF([.A1]>0;"up";TaxRate)', 0, 0, 1, 0) == '=IF([.A2]>0;"up";TaxRate)'
+
+
+# -- the two spellings of a formula -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "stored,a1",
+    [
+        # Verified against a real Calc via XCell.setFormula: these round-trip.
+        ("=[.A1]+1", "=A1+1"),
+        ("=[.$A$1]+1", "=$A$1+1"),
+        ("=[.$A1]+[.A$1]", "=$A1+A$1"),
+        ("=SUM([.A1:.B2])", "=SUM(A1:B2)"),
+        ("=ROUND([.A1];2)", "=ROUND(A1;2)"),
+        ("=IF([.A1]>0;ROUND([.A1];2);0)", "=IF(A1>0;ROUND(A1;2);0)"),
+        ("=[Other.A1]", "=Other.A1"),
+        ("=[$'Odd Name'.$A$1]", "=$'Odd Name'.$A$1"),
+        ("=SUM([Other.A1:Other.B2])", "=SUM(Other.A1:Other.B2)"),
+        ('=IF([.A1]>0;"up";"down")', '=IF(A1>0;"up";"down")'),
+        ("=TheName*2", "=TheName*2"),
+        ("=SUM([.A:.A])", "=SUM(A:A)"),
+    ],
+)
+def test_to_a1_matches_what_calc_accepts(stored, a1):
+    """UNO's setFormula wants A1, and silently stores a broken formula if given
+    the ODF form, so this mapping is load-bearing for the extension."""
+    from odslint.formula.edit import to_a1
+
+    assert to_a1(stored) == a1
+
+
+def test_to_a1_refuses_what_it_cannot_spell():
+    from odslint.formula.edit import to_a1
+
+    assert to_a1("=[#REF!]") is None
+    assert to_a1("=['file:///x.ods'#$S.A1]") is None
+
+
+@pytest.mark.parametrize("name,formula,row,col", _all_fixture_formulas())
+def test_to_a1_only_ever_removes_the_odf_qualification(name, formula, row, col):
+    """The two spellings differ in references and nothing else."""
+    from odslint.formula.edit import to_a1
+
+    converted = to_a1(formula)
+    if converted is None:
+        return
+    assert converted.replace("[", "").replace("]", "").replace(".", "") == formula.replace(
+        "[", ""
+    ).replace("]", "").replace(".", "")

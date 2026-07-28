@@ -14,7 +14,7 @@ import re
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
-from odslint.diagnostics import Diagnostic, Severity
+from odslint.diagnostics import EDIT_NUMBER, Applicability, Diagnostic, Edit, Fix, Severity
 from odslint.model import Document
 from odslint.rules.base import Rule, register
 
@@ -67,6 +67,62 @@ def classify(text: str) -> str | None:
     return None
 
 
+def parse_number(text: str) -> float | None:
+    """The value of a numeric-looking text cell, when it is beyond doubt.
+
+    Deliberately much narrower than :func:`classify`. Flagging ``1,234`` is
+    right — it really is a number stored as text — but *converting* it is not,
+    because it reads as 1234 in en-US and 1.234 in de-DE and the cell carries
+    nothing that settles which. Same for anything wearing a currency symbol or a
+    percent sign: those need a number format to survive the round trip, and this
+    fix does not write one. Returning ``None`` costs a fix; guessing costs the
+    user a wrong number, so anything ambiguous returns ``None``.
+    """
+    value = text.strip()
+    if not value:
+        return None
+    if "%" in value or "CHF" in value or any(symbol in value for symbol in _CURRENCY):
+        return None
+    if any(ch.isspace() for ch in value):
+        return None
+
+    negative = value.startswith("-")
+    body = value.lstrip("+-")
+    if not body or not body[0].isdigit():
+        return None
+
+    dots, commas = body.count("."), body.count(",")
+    if dots and commas:
+        # Both present, so the rightmost one is the decimal point.
+        decimal = "." if body.rfind(".") > body.rfind(",") else ","
+        grouping = "," if decimal == "." else "."
+        normalized = body.replace(grouping, "").replace(decimal, ".")
+    elif dots + commas == 1:
+        separator = "." if dots else ","
+        if len(body.split(separator)[1]) == 3:
+            # "1.234" / "1,234": grouping in one locale, a decimal in another.
+            return None
+        normalized = body.replace(separator, ".")
+    elif dots + commas == 0:
+        normalized = body
+    else:
+        # Repeated separators can only be grouping: 1.234.567
+        normalized = body.replace("." if dots else ",", "")
+
+    try:
+        number = float(normalized)
+    except ValueError:
+        return None
+    return -number if negative else number
+
+
+def format_number(value: float) -> str:
+    """``office:value`` form: no trailing ``.0`` on whole numbers."""
+    if value == int(value) and abs(value) < 2**53:
+        return str(int(value))
+    return repr(value)
+
+
 @register
 class NumberStoredAsText(Rule):
     id: ClassVar[str] = "data/number-stored-as-text"
@@ -87,10 +143,31 @@ class NumberStoredAsText(Rule):
                 kind = classify(cell.text)
                 if kind is None or (kind == "date" and not check_dates):
                     continue
+                number = parse_number(cell.text) if kind == "number" else None
+                fix = None
+                if number is not None:
+                    payload = format_number(number)
+                    # Unsafe: this changes what the cell *is*, and a downstream
+                    # formula that relied on the text form will now see a number.
+                    fix = Fix(
+                        title=f"store {cell.text.strip()!r} as the number {payload}",
+                        applicability=Applicability.UNSAFE,
+                        edits=(
+                            Edit(
+                                sheet=sheet.name,
+                                row=cell.row,
+                                col=cell.col,
+                                kind=EDIT_NUMBER,
+                                value=payload,
+                                text=payload,
+                            ),
+                        ),
+                    )
                 yield self.diag(
                     sheet,
                     cell,
                     f"{cell.text.strip()!r} is stored as text but reads as a {kind}",
                     hint="it will be skipped by SUM and sort as text; re-enter it or "
                     "use Data > Text to Columns to convert the column",
+                    fix=fix,
                 )
