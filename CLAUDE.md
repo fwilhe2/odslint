@@ -182,8 +182,9 @@ before touching it:
 - `clean_bytes` assembles the final document itself (`_assemble`) rather than using upstream's
   `tostring(root)`, which drops comments outside the root element — our fixtures open with one.
 
-Dropping `office:settings` means `Document.settings` comes back empty on a cleaned file, which
-matters for the `meta/iterative-calculation-enabled` idea in the backlog.
+Dropping `office:settings` and the volatile `office:meta` children means a cleaned file cannot
+answer questions about either — which is what the `meta/iterative-calculation-enabled` idea in the
+backlog would need.
 
 ## Testing convention
 
@@ -254,7 +255,8 @@ Worth building next, roughly in value order. Several are cheap now that the load
 - `portability/vendor-function` (`ORG.OPENOFFICE.*`, `COM.MICROSOFT.*`),
   `portability/embedded-macro` (`<script:module>`)
 - `perf/whole-column-reference` (`Reference.is_whole_column` exists),
-  `meta/iterative-calculation-enabled` (`Document.settings`)
+  `meta/iterative-calculation-enabled` (needs `settings.xml`, which the loader no longer reads —
+  parse it in `loader._parse_document` when the rule lands)
 
 ## Autofix
 

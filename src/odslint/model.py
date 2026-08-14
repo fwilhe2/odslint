@@ -155,8 +155,6 @@ class Document:
     sheets: list[Sheet] = field(default_factory=list)
     #: Document-scoped names only; sheet-scoped ones live on their ``Sheet``.
     named_expressions: list[NamedExpression] = field(default_factory=list)
-    metadata: dict[str, str] = field(default_factory=dict)
-    settings: dict[str, str] = field(default_factory=dict)
     #: Non-fatal loader notes (e.g. a repeat run that hit the materialization cap).
     load_warnings: list[str] = field(default_factory=list)
 
