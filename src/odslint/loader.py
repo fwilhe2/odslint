@@ -53,9 +53,6 @@ MAX_REPEAT = 1024
 MAX_ROWS = 1 << 20
 MAX_COLS = 1 << 14
 
-ODS_EXTENSIONS = frozenset({".ods", ".ots"})
-FODS_EXTENSIONS = frozenset({".fods", ".fots", ".xml"})
-
 
 def _q(prefix: str, local: str) -> str:
     return f"{{{NS[prefix]}}}{local}"

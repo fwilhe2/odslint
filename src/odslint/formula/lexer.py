@@ -13,25 +13,6 @@ from dataclasses import dataclass
 
 from odslint.formula.reference import Reference, parse_reference
 
-#: Token kinds. ``func`` is a name immediately followed by ``(``.
-KINDS = frozenset(
-    {
-        "ws",
-        "ref",
-        "string",
-        "number",
-        "name",
-        "func",
-        "error",
-        "op",
-        "sep",
-        "lparen",
-        "rparen",
-        "brace",
-        "other",
-    }
-)
-
 _NUMBER_RE = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
 _NAME_RE = re.compile(r"[A-Za-z_\\][A-Za-z0-9_.\\]*")
 _ERROR_RE = re.compile(r"#(?:REF!|DIV/0!|N/A|VALUE!|NAME\?|NUM!|NULL!|ERR:\d+)", re.I)
@@ -41,6 +22,9 @@ _ONE_CHAR_OPS = "+-*/^&=<>%!~:"
 
 @dataclass(frozen=True)
 class Token:
+    #: ``ws``, ``ref``, ``string``, ``number``, ``name``, ``func``, ``error``,
+    #: ``op``, ``sep``, ``lparen``, ``rparen``, ``brace`` or ``other``. ``func``
+    #: is a name immediately followed by ``(``.
     kind: str
     text: str
     pos: int
@@ -232,8 +216,3 @@ def call_contexts(tokens: list[Token]) -> list[CallContext | None]:
             prev = token
 
     return out
-
-
-def iter_references(formula: str) -> list[Token]:
-    """Convenience: just the reference tokens of a formula."""
-    return [t for t in lex(formula) if t.kind == "ref" and t.ref is not None]

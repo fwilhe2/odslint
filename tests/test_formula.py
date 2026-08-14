@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from odslint.formula import lex, normalize_r1c1, parse_range_address, resolve
-from odslint.formula.lexer import call_contexts, strip_prefix
-from odslint.formula.reference import parse_reference
+from odslint.formula.lexer import call_contexts, lex, strip_prefix
+from odslint.formula.normalize import normalize_r1c1
+from odslint.formula.reference import parse_range_address, parse_reference, resolve
 
 
 def kinds(formula: str) -> list[str]:

@@ -61,13 +61,6 @@ class CellRange:
     def is_single_cell(self) -> bool:
         return self.row1 == self.row2 and self.col1 == self.col2
 
-    def contains(self, sheet: str, row: int, col: int) -> bool:
-        return (
-            sheet.casefold() == self.sheet.casefold()
-            and self.row1 <= row <= self.row2
-            and self.col1 <= col <= self.col2
-        )
-
     def __str__(self) -> str:
         start = a1(self.row1, self.col1)
         if self.is_single_cell:
@@ -104,10 +97,6 @@ class Cell:
         return self.formula is not None
 
     @property
-    def is_merged(self) -> bool:
-        return self.rows_spanned > 1 or self.cols_spanned > 1
-
-    @property
     def number(self) -> float | None:
         """The numeric value, or ``None`` if this cell does not hold one."""
         if self.value is None or self.value_type not in NUMERIC_TYPES:
@@ -137,16 +126,6 @@ class Sheet:
 
     def formula_cells(self) -> list[Cell]:
         return [c for c in self.iter_cells() if c.is_formula]
-
-    @property
-    def used_range(self) -> tuple[int, int] | None:
-        """``(max_row, max_col)`` of the content, or ``None`` for an empty sheet."""
-        if not self.cells:
-            return None
-        return (
-            max(r for r, _ in self.cells),
-            max(c for _, c in self.cells),
-        )
 
 
 @dataclass
