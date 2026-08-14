@@ -12,8 +12,7 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   UV_FROZEN: "1"
@@ -79,18 +78,22 @@ jobs:
           path: dist-oxt/
           if-no-files-found: error
 
-
-      - name: Create Release
-        run: |
-          gh release create "${GITHUB_REF#refs/tags/}" --title "Release ${GITHUB_REF#refs/tags/}" --notes "Release ${GITHUB_REF#refs/tags/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Attach the extension to the release
+      - name: Publish the release with the extension attached
+        # Pushing a tag creates a tag, not a Release, so `gh release upload`
+        # alone fails with "release not found" on a first run. Create it here —
+        # but a re-run (or workflow_dispatch on an already-released tag) finds
+        # the release present, and `gh release create` errors on that, so
+        # upload into the existing one instead.
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF#refs/tags/}" dist-oxt/*.oxt --clobber
+        run: |
+          tag=${GITHUB_REF#refs/tags/}
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist-oxt/*.oxt --clobber
+          else
+            gh release create "$tag" dist-oxt/*.oxt --generate-notes --verify-tag
+          fi
 
   publish:
     name: publish to PyPI
