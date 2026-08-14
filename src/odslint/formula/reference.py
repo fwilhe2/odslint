@@ -62,10 +62,6 @@ class Reference:
     invalid: bool = False
 
     @property
-    def is_range(self) -> bool:
-        return self.end is not None
-
-    @property
     def is_single_cell(self) -> bool:
         return self.end is None and self.start is not None and self.start.is_complete
 
@@ -225,14 +221,6 @@ def format_part_r1c1(part: RefPart, base_row: int, base_col: int) -> str:
     if part.col is not None:
         out += f"C{part.col + 1}" if part.col_abs else f"C[{part.col - base_col}]"
     return out
-
-
-def format_a1(part: RefPart) -> str:
-    """Render one corner in user-facing A1 form (no ``$`` markers)."""
-    col = col_letters(part.col) if part.col is not None else ""
-    row = str(part.row + 1) if part.row is not None else ""
-    prefix = f"{part.sheet}." if part.sheet else ""
-    return f"{prefix}{col}{row}"
 
 
 def _quote_sheet(name: str) -> str:

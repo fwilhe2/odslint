@@ -22,9 +22,8 @@ Two things to know before pointing it at a document you care about:
 * It is lossy by design. Unused styles, ``office:settings``, ``office:scripts``,
   volatile ``office:meta`` children and cached OLE replacement images are all
   dropped. That is fine for a file whose source of truth is git; it is not a
-  general-purpose "optimize my spreadsheet" pass. Dropping ``office:settings``
-  in particular means :attr:`Document.settings <odslint.model.Document.settings>`
-  comes back empty on the cleaned file.
+  general-purpose "optimize my spreadsheet" pass. A rule that ever wants to read
+  ``office:settings`` or ``office:meta`` will not find them on a cleaned file.
 """
 
 from __future__ import annotations

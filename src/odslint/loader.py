@@ -53,9 +53,6 @@ MAX_REPEAT = 1024
 MAX_ROWS = 1 << 20
 MAX_COLS = 1 << 14
 
-ODS_EXTENSIONS = frozenset({".ods", ".ots"})
-FODS_EXTENSIONS = frozenset({".fods", ".fots", ".xml"})
-
 
 def _q(prefix: str, local: str) -> str:
     return f"{{{NS[prefix]}}}{local}"
@@ -178,33 +175,20 @@ def _parse_bytes(data: bytes, what: str) -> etree._Element:
 
 def _load_package(path: Path) -> Document:
     with zipfile.ZipFile(path) as zf:
-        names = set(zf.namelist())
-        if "content.xml" not in names:
+        if "content.xml" not in set(zf.namelist()):
             raise LoadError(f"{path}: ZIP without content.xml — not an ODF package")
         content = _parse_bytes(zf.read("content.xml"), "content.xml")
-        meta = _parse_bytes(zf.read("meta.xml"), "meta.xml") if "meta.xml" in names else None
-        settings = (
-            _parse_bytes(zf.read("settings.xml"), "settings.xml")
-            if "settings.xml" in names
-            else None
-        )
-    return _parse_document(path, content, meta, settings)
+    return _parse_document(path, content)
 
 
 def _load_flat(path: Path) -> Document:
     root = _parse_bytes(path.read_bytes(), str(path))
     if root.tag != _q("office", "document"):
         raise LoadError(f"{path}: root element is {root.tag}, expected office:document")
-    # In a flat file meta and settings are inlined under the same root.
-    return _parse_document(path, root, root, root)
+    return _parse_document(path, root)
 
 
-def _parse_document(
-    path: Path,
-    content: etree._Element,
-    meta: etree._Element | None,
-    settings: etree._Element | None,
-) -> Document:
+def _parse_document(path: Path, content: etree._Element) -> Document:
     body = content.find(f".//{{{NS['office']}}}spreadsheet")
     if body is None:
         raise LoadError(f"{path}: no office:spreadsheet body — not a spreadsheet document")
@@ -218,10 +202,6 @@ def _parse_document(
     for container in body.iterchildren(NAMED_EXPRESSIONS):
         doc.named_expressions.extend(_parse_named_expressions(container, scope=None))
 
-    if meta is not None:
-        doc.metadata = _parse_meta(meta)
-    if settings is not None:
-        doc.settings = _parse_settings(settings)
     return doc
 
 
@@ -404,25 +384,6 @@ def _parse_named_expressions(container: etree._Element, scope: str | None) -> li
                     base_cell=el.get(A_BASE_CELL),
                 )
             )
-    return out
-
-
-def _parse_meta(meta: etree._Element) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for el in meta.iter():
-        tag = etree.QName(el).localname if isinstance(el.tag, str) else None
-        ns = etree.QName(el).namespace if isinstance(el.tag, str) else None
-        if ns in (NS["meta"], NS["dc"]) and el.text and tag:
-            out[tag] = el.text
-    return out
-
-
-def _parse_settings(settings: etree._Element) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for item in settings.iter(_q("config", "config-item")):
-        name = item.get(_q("config", "name"))
-        if name and item.text is not None:
-            out[name] = item.text
     return out
 
 
